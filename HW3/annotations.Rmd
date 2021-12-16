@@ -1,0 +1,106 @@
+---
+title: "HW3"
+author: "Masoumeh Khodaverdi"
+date: "11/18/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Q1
+
+As in the class, I will work on Chromosome 10:
+```
+CHR="Chr10"
+```
+
+First, I created phenotype data from the climate data using the code in tutorial 8. I chose a new file name for the phenotype file.
+```
+tail -n +2 /data/project_data/PopGenomics/climD.txt | \
+grep -w -f Admixed.Inds - >Admixed.pheno_clim
+
+printf "FID\tIID\tmean_finalFreeze\tmean_cGDDfreeze\tmed_DD0\n%.0s" >Plink/pheno_clim.forPlink
+cat Admixed.pheno_clim >> Plink/pheno_clim.forPlink
+```
+We already have the covariate file inside `Plink` folder, so we do not need to regenerate them. Let's run plink for the new phenotypes. Because we have three traits (three climate variables), we will get three output files, one for each climate variable.
+```
+cd Plink_clim
+
+plink2 --bfile ${CHR}_Admixed_FAI \
+--pheno pheno_clim.forPlink \
+--covar cov.forPlink \
+--glm omit-ref
+```
+I can now transfer the output files (`plink2.mean_cGDDfreeze.glm.linear`, ` plink2.mean_finalFreeze.glm.linear` and `plink2.med_DD0.glm.linear`) to my local machine and use R to produce the required plots.
+
+Here are my R codes (very similar to tutorial 8) for plotting P-values for all the SNPs:
+```
+library(ggplot2)
+library(gridExtra)
+
+# Get the list of admixed individuals:
+Admixed <- read.table("Admixed.Inds",header=F)
+
+# Read in list of positions
+snps <- read.table("Chr10.kept.sites",sep="\t", header=T)
+
+
+# loading Plink results that were generated for climate traits
+cGDDfreeze <- read.table("plink2.mean_cGDDfreeze.glm.linear",skip=1,sep="\t",header=F)
+names(cGDDfreeze) = c("CHROM",    "POS",  "ID",   "REF",  "ALT",  "A1",   "TEST", "OBS_CT",   "BETA", "SE",   "T_STAT",   "P")
+cGDDfreeze2 <- cGDDfreeze[which(cGDDfreeze$TEST=="ADD"),]
+
+
+# Define association outliers as the upper 0.1% of p-values
+cGDDfreeze2 <- cbind(snps, cGDDfreeze2[,-c(1:2)])
+cGDDfreeze2$outlier = ifelse(cGDDfreeze2$P<quantile(cGDDfreeze2$P,0.001),2,1)
+
+p1 <- ggplot(cGDDfreeze2,aes(x=POS,y=-1*log10(P))) +
+  geom_point(size=cGDDfreeze2$outlier, color=cGDDfreeze2$outlier) + 
+  xlab("Position (bp) along chromosome") +
+  ylab("-log10 P-value") +
+  ggtitle("Growing Degree Days")
+
+#######################################
+# repeat above code for the next climate variable: med_DD0
+DD0 <- read.table("plink2.med_DD0.glm.linear",skip=1,sep="\t",header=F)
+names(DD0) = c("CHROM",  "POS",  "ID",   "REF",  "ALT",  "A1",   "TEST", "OBS_CT",   "BETA", "SE",   "T_STAT",   "P")
+DD02 <- DD0[which(DD0$TEST=="ADD"),]
+DD02 <- cbind(snps, DD02[,-c(1,2)])
+DD02$outlier = ifelse(DD02$P<quantile(DD02$P,0.001),2,1)
+
+p2 <- ggplot(DD02,aes(x=POS,y=-1*log10(P))) +
+  geom_point(size=DD02$outlier, color=DD02$outlier) + 
+  xlab("Position (bp) along chromosome") +
+  ylab("-log10 P-value") +
+  ggtitle("Chilling Degree Days")
+
+#######################################
+# repeat above code for the next climate variable: mean_finalFreeze
+finalFreeze <- read.table("plink2.mean_finalFreeze.glm.linear",skip=1,sep="\t",header=F)
+names(finalFreeze) = c("CHROM",    "POS",  "ID",   "REF",  "ALT",  "A1",   "TEST", "OBS_CT",   "BETA", "SE",   "T_STAT",   "P")
+finalFreeze <- finalFreeze[which(finalFreeze$TEST=="ADD"),]
+finalFreeze2 <- cbind(snps, finalFreeze[,-c(1,2)])
+finalFreeze2$outlier = ifelse(finalFreeze2$P<quantile(finalFreeze2$P,0.001),2,1)
+
+p3 <- ggplot(finalFreeze2,aes(x=POS,y=-1*log10(P))) +
+  geom_point(size=finalFreeze2$outlier, color=finalFreeze2$outlier) + 
+  xlab("Position (bp) along chromosome") +
+  ylab("-log10 P-value") +
+  ggtitle("Last Freezing")
+
+grid.arrange(p1, p2, p3, nrow = 3)
+```
+
+## Q2
+
+For this question, first we go back to the codes from tutorial 8 and for phenotype bud flush. This time we relax the threshold from 0.1% to 1% to assign outliers. So, we repeat the computations for the climate variables with the new threshold too.
+```
+budflush <- read.table("plink2.FLUSH.glm.linear",skip=1,sep="\t",header=F)
+names(budflush) = c("CHROM",    "POS",  "ID",   "REF",  "ALT",  "A1",   "TEST", "OBS_CT",   "BETA", "SE",   "T_STAT",   "P")
+budflush <- budflush[which(budflush$TEST=="ADD"),]
+budflush2 <- cbind(snps, budflush[,-c(1,2)])
+budflush2$outlier = ifelse(budflush2$P<quantile(budflush2$P,0.01),2,1)
+```
